@@ -97,3 +97,4 @@ A modern web application for resizing images with professional interpolation met
 
 **Note**: This application works entirely in your browser. No internet connection is required after the initial page load.
 # resizing
+# quantizer
