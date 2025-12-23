@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Resizer - Advanced Interpolation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <a href="../index.html" class="back-to-menu-btn" title="Back to Menu">
+                    ← Back to Menu
+                </a>
+                <div>
+                    <h1>🖼️ Advanced Image Resizer</h1>
+                    <p>Resize images with professional interpolation methods</p>
+                </div>
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">📁</div>
+                        <h3>Drop images here or click to browse</h3>
+                        <p>Supports single images or entire folders</p>
+                        <div class="file-count" id="fileCount" style="display: none;">
+                            <span id="fileCountText">0 files selected</span>
+                        </div>
+                        <div class="upload-options">
+                            <label class="upload-mode-toggle">
+                                <input type="checkbox" id="folderMode"> Upload entire folder
+                            </label>
+                        </div>
+                        <input type="file" id="fileInput" multiple accept="image/*">
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <div class="control-group">
+                    <label for="interpolationMethod">Interpolation Method:</label>
+                    <select id="interpolationMethod">
+                        <option value="nearest">Nearest Neighbor</option>
+                        <option value="bilinear">Bilinear</option>
+                        <option value="bicubic">Bicubic</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="resizeMode">Resize Mode:</label>
+                    <select id="resizeMode">
+                        <option value="pixels">Pixels</option>
+                        <option value="percentage">Percentage</option>
+                    </select>
+                </div>
+
+                <div class="current-size" id="currentSize" style="display: none;">
+                    <h4>Current Image Size:</h4>
+                    <div class="size-info">
+                        <span id="currentDimensions">-</span>
+                        <span id="currentFileSize">-</span>
+                    </div>
+                </div>
+
+                <div class="resize-controls">
+                    <div class="control-group" id="pixelControls">
+                        <label for="width">Target Width:</label>
+                        <input type="number" id="width" placeholder="Enter width" min="1">
+                    </div>
+
+                    <div class="control-group" id="pixelControls">
+                        <label for="height">Target Height:</label>
+                        <input type="number" id="height" placeholder="Enter height" min="1">
+                    </div>
+
+                    <div class="control-group" id="percentageControls" style="display: none;">
+                        <label for="percentage">Resize Percentage:</label>
+                        <input type="number" id="percentage" placeholder="Enter percentage" min="1" max="1000" value="100">
+                        <span class="percentage-label">%</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="maintainAspect">Maintain Aspect Ratio:</label>
+                    <input type="checkbox" id="maintainAspect" checked>
+                </div>
+
+                <button id="processBtn" class="process-btn" disabled>Process Images</button>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Processing...</div>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h3>Processed Images</h3>
+                <div class="results-grid" id="resultsGrid"></div>
+                <button id="downloadAllBtn" class="download-all-btn">Download All</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Theme management
+        function getTheme() {
+            return localStorage.getItem('theme') || 'light';
+        }
+        
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const themeIcon = document.querySelector('.theme-icon');
+            if (themeIcon) {
+                themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+            }
+        }
+        
+        function toggleTheme() {
+            const currentTheme = getTheme();
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        }
+        
+        // Initialize theme
+        setTheme(getTheme());
+    </script>
+</body>
+</html>
