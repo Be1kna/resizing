@@ -32,15 +32,15 @@ class ImageResizer {
             uploadArea.classList.remove('dragover');
         });
 
-        uploadArea.addEventListener('drop', (e) => {
+        uploadArea.addEventListener('drop', async (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
-            this.handleFiles(e.dataTransfer.files);
+            await this.handleFiles(e.dataTransfer.files);
         });
 
         // File input change
-        fileInput.addEventListener('change', (e) => {
-            this.handleFiles(e.target.files);
+        fileInput.addEventListener('change', async (e) => {
+            await this.handleFiles(e.target.files);
         });
 
         // Process button
@@ -136,9 +136,50 @@ class ImageResizer {
         img.src = URL.createObjectURL(firstFile);
     }
 
-    handleFiles(fileList) {
+    async handleFiles(fileList) {
         console.log('Files received:', fileList.length);
-        this.files = Array.from(fileList).filter(file => file.type.startsWith('image/'));
+        const incomingFiles = Array.from(fileList);
+        const imageFiles = incomingFiles.filter(file => file.type.startsWith('image/'));
+        const zipFiles = incomingFiles.filter(file => file.name.toLowerCase().endsWith('.zip'));
+
+        if (zipFiles.length > 0) {
+            if (typeof JSZip === 'undefined') {
+                alert('ZIP support is not available. Please refresh the page.');
+                return;
+            }
+        }
+
+        const extractedFiles = [];
+
+        for (const zipFile of zipFiles) {
+            try {
+                const zip = await JSZip.loadAsync(zipFile);
+                const entries = Object.values(zip.files);
+
+                for (const entry of entries) {
+                    if (entry.dir) continue;
+                    const filename = entry.name.toLowerCase();
+                    if (!this.isImageFilename(filename)) continue;
+
+                    const blob = await entry.async('blob');
+                    const mimeType = blob.type || this.getMimeTypeFromName(entry.name);
+                    const file = new File([blob], entry.name, { type: mimeType || 'image/png' });
+                    file.relativePath = entry.name;
+                    extractedFiles.push(file);
+                }
+            } catch (error) {
+                console.error('Error reading zip file:', zipFile.name, error);
+                alert(`Unable to read zip file: ${zipFile.name}`);
+            }
+        }
+
+        this.files = [...imageFiles, ...extractedFiles].filter(file => file.type.startsWith('image/') || this.isImageFilename(file.name));
+
+        this.files.forEach((file) => {
+            if (!file.relativePath) {
+                file.relativePath = file.webkitRelativePath || file.name;
+            }
+        });
         
         console.log('Image files filtered:', this.files.length);
         
@@ -164,6 +205,24 @@ class ImageResizer {
         } else {
             console.log('No image files found');
             alert('No image files found. Please select valid image files.');
+        }
+    }
+
+    isImageFilename(filename) {
+        return /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(filename);
+    }
+
+    getMimeTypeFromName(filename) {
+        const ext = filename.toLowerCase().split('.').pop();
+        switch (ext) {
+            case 'png': return 'image/png';
+            case 'jpg':
+            case 'jpeg': return 'image/jpeg';
+            case 'gif': return 'image/gif';
+            case 'bmp': return 'image/bmp';
+            case 'webp': return 'image/webp';
+            case 'svg': return 'image/svg+xml';
+            default: return 'image/png';
         }
     }
 
@@ -296,6 +355,7 @@ class ImageResizer {
                 const processedImageData = await this.resizeImage(file, finalWidth, finalHeight, method);
                 this.processedImages.push({
                     name: file.name,
+                    relativePath: file.relativePath || file.webkitRelativePath || file.name,
                     data: processedImageData,
                     originalSize: `${file.size} bytes`
                 });
@@ -319,23 +379,16 @@ class ImageResizer {
                     canvas.width = targetWidth;
                     canvas.height = targetHeight;
 
-                    // Get original image data
-                    const originalCanvas = document.createElement('canvas');
-                    const originalCtx = originalCanvas.getContext('2d');
-                    originalCanvas.width = img.width;
-                    originalCanvas.height = img.height;
-                    originalCtx.drawImage(img, 0, 0);
-                    const originalData = originalCtx.getImageData(0, 0, img.width, img.height);
+                    // Apply interpolation method via canvas scaling
+                    if (method === 'nearest') {
+                        ctx.imageSmoothingEnabled = false;
+                    } else {
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = method === 'bicubic' ? 'high' : 'medium';
+                    }
 
-                    // Apply interpolation method
-                    const resizedData = this.interpolateImage(originalData, targetWidth, targetHeight, method);
-                    
-                    // Create new image data
-                    const newImageData = ctx.createImageData(targetWidth, targetHeight);
-                    newImageData.data.set(resizedData);
-                    
-                    // Draw to canvas
-                    ctx.putImageData(newImageData, 0, 0);
+                    // Draw full image to target canvas (no cropping)
+                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
                     
                     // Convert to blob
                     canvas.toBlob((blob) => {
@@ -549,19 +602,53 @@ class ImageResizer {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename.replace(/\.[^/.]+$/, '_resized.png');
+        a.download = this.getResizedFileName(filename);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
 
-    downloadAllImages() {
-        this.processedImages.forEach((image, index) => {
-            setTimeout(() => {
-                this.downloadImage(image.data, image.name);
-            }, index * 100); // Small delay between downloads
+    async downloadAllImages() {
+        if (this.processedImages.length === 0) return;
+
+        if (typeof JSZip === 'undefined') {
+            alert('ZIP download is not available. Please refresh the page.');
+            return;
+        }
+
+        const zip = new JSZip();
+
+        this.processedImages.forEach((image) => {
+            const resizedName = this.getResizedFileName(image.name);
+            const relativePath = image.relativePath || image.name;
+            const zipPath = this.replaceFileNameInPath(relativePath, resizedName);
+            zip.file(zipPath, image.data);
         });
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        this.downloadBlob(zipBlob, 'resized-images.zip');
+    }
+
+    getResizedFileName(filename) {
+        return filename.replace(/\.[^/.]+$/, '') + '_resized.png';
+    }
+
+    replaceFileNameInPath(path, newFileName) {
+        const parts = path.split('/');
+        parts[parts.length - 1] = newFileName;
+        return parts.join('/');
+    }
+
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 
