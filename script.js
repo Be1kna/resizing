@@ -369,37 +369,53 @@ class ImageResizer {
     }
 
     async resizeImage(file, targetWidth, targetHeight, method) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    canvas.width = targetWidth;
-                    canvas.height = targetHeight;
+        return new Promise(async (resolve, reject) => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { colorSpace: 'srgb' }) || canvas.getContext('2d');
 
-                    // Apply interpolation method via canvas scaling
-                    if (method === 'nearest') {
-                        ctx.imageSmoothingEnabled = false;
-                    } else {
-                        ctx.imageSmoothingEnabled = true;
-                        ctx.imageSmoothingQuality = method === 'bicubic' ? 'high' : 'medium';
-                    }
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
 
-                    // Draw full image to target canvas (no cropping)
-                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-                    
-                    // Convert to blob
-                    canvas.toBlob((blob) => {
-                        resolve(blob);
-                    }, 'image/png');
-                } catch (error) {
-                    reject(error);
+                // Apply interpolation method via canvas scaling
+                if (method === 'nearest') {
+                    ctx.imageSmoothingEnabled = false;
+                } else {
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = method === 'bicubic' ? 'high' : 'medium';
                 }
-            };
-            img.onerror = reject;
-            img.src = URL.createObjectURL(file);
+
+                let source;
+                if (typeof createImageBitmap === 'function') {
+                    try {
+                        source = await createImageBitmap(file, { colorSpaceConversion: 'default' });
+                    } catch (error) {
+                        console.warn('createImageBitmap failed, falling back to Image()', error);
+                    }
+                }
+
+                if (source) {
+                    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+                    if (typeof source.close === 'function') {
+                        source.close();
+                    }
+                } else {
+                    const img = new Image();
+                    await new Promise((resolveImage, rejectImage) => {
+                        img.onload = resolveImage;
+                        img.onerror = rejectImage;
+                        img.src = URL.createObjectURL(file);
+                    });
+                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                }
+
+                // Export from canvas -> strips metadata and uses sRGB output
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/png');
+            } catch (error) {
+                reject(error);
+            }
         });
     }
 
