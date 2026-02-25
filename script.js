@@ -308,6 +308,7 @@ class ImageResizer {
     async processImages() {
         const resizeMode = document.getElementById('resizeMode').value;
         const method = document.getElementById('interpolationMethod').value;
+        const fitMode = document.getElementById('fitMode').value;
         
         let targetWidth, targetHeight;
         
@@ -352,7 +353,7 @@ class ImageResizer {
                     });
                 }
                 
-                const processedImageData = await this.resizeImage(file, finalWidth, finalHeight, method);
+                const processedImageData = await this.resizeImage(file, finalWidth, finalHeight, method, fitMode);
                 this.processedImages.push({
                     name: file.name,
                     relativePath: file.relativePath || file.webkitRelativePath || file.name,
@@ -368,7 +369,7 @@ class ImageResizer {
         this.showResults();
     }
 
-    async resizeImage(file, targetWidth, targetHeight, method) {
+    async resizeImage(file, targetWidth, targetHeight, method, fitMode) {
         return new Promise(async (resolve, reject) => {
             try {
                 const canvas = document.createElement('canvas');
@@ -395,7 +396,9 @@ class ImageResizer {
                 }
 
                 if (source) {
-                    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+                    const sourceWidth = source.width;
+                    const sourceHeight = source.height;
+                    this.drawWithFitMode(ctx, source, sourceWidth, sourceHeight, targetWidth, targetHeight, fitMode);
                     if (typeof source.close === 'function') {
                         source.close();
                     }
@@ -406,7 +409,9 @@ class ImageResizer {
                         img.onerror = rejectImage;
                         img.src = URL.createObjectURL(file);
                     });
-                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                    const sourceWidth = img.naturalWidth || img.width;
+                    const sourceHeight = img.naturalHeight || img.height;
+                    this.drawWithFitMode(ctx, img, sourceWidth, sourceHeight, targetWidth, targetHeight, fitMode);
                 }
 
                 // Export from canvas -> strips metadata and uses sRGB output
@@ -417,6 +422,22 @@ class ImageResizer {
                 reject(error);
             }
         });
+    }
+
+    drawWithFitMode(ctx, source, sourceWidth, sourceHeight, targetWidth, targetHeight, fitMode) {
+        if (fitMode === 'extend') {
+            const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+            const drawWidth = Math.round(sourceWidth * scale);
+            const drawHeight = Math.round(sourceHeight * scale);
+            const dx = Math.round((targetWidth - drawWidth) / 2);
+            const dy = Math.round((targetHeight - drawHeight) / 2);
+            ctx.clearRect(0, 0, targetWidth, targetHeight);
+            ctx.drawImage(source, dx, dy, drawWidth, drawHeight);
+            return;
+        }
+
+        // Default: stretch to fill
+        ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
     }
 
     interpolateImage(imageData, targetWidth, targetHeight, method) {
